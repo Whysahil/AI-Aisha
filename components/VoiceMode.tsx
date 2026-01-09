@@ -20,11 +20,18 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const aiRef = useRef<GoogleGenAI | null>(null);
   
-  // Track if component is mounted to handle cleanup
   const mountedRef = useRef(true);
 
   useEffect(() => {
     mountedRef.current = true;
+    
+    // API_KEY is injected by vite.config.ts define
+    if (!process.env.API_KEY) {
+      console.error("Missing API_KEY");
+      setConnectionState(ConnectionState.ERROR);
+      return;
+    }
+
     aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     let sessionPromise: Promise<any> | null = null;
@@ -34,18 +41,17 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
       setConnectionState(ConnectionState.CONNECTING);
       
       try {
-        // 1. Audio Output Context
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
           sampleRate: 24000,
         });
         audioContextRef.current = audioCtx;
 
-        // 2. Audio Input Stream
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         streamRef.current = stream;
 
-        // 3. Connect to Gemini Live
-        sessionPromise = aiRef.current!.live.connect({
+        if (!aiRef.current) return;
+
+        sessionPromise = aiRef.current.live.connect({
           model: VOICE_MODEL,
           callbacks: {
             onopen: () => {
@@ -53,7 +59,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
               setConnectionState(ConnectionState.CONNECTED);
               console.log("Connected to Live API");
 
-              // Start streaming audio from mic to model
               const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({
                 sampleRate: 16000,
               });
@@ -65,7 +70,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
 
                 const inputData = e.inputBuffer.getChannelData(0);
                 
-                // Visualizer volume calculation
                 let sum = 0;
                 for (let i = 0; i < inputData.length; i++) {
                   sum += Math.abs(inputData[i]);
@@ -75,8 +79,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
 
                 const pcmBlob = createPcmBlob(inputData);
                 
-                // CRITICAL: Use the sessionPromise to ensure we don't send before connection
-                // or after cleanup
                 if (sessionPromise) {
                   sessionPromise.then(session => {
                      if (mountedRef.current) {
@@ -92,7 +94,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
             onmessage: async (message: LiveServerMessage) => {
               if (!mountedRef.current) return;
 
-              // Handle Audio Output
               const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
               if (base64Audio && audioContextRef.current) {
                 try {
@@ -123,7 +124,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
                 }
               }
               
-              // Handle Interruption
               if (message.serverContent?.interrupted) {
                   sourcesRef.current.forEach(node => {
                       try { node.stop(); } catch(e) {}
@@ -150,7 +150,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
         });
 
         activeSession = await sessionPromise;
-        // If unmounted during connection, close immediately
         if (!mountedRef.current) {
             activeSession.close();
         }
@@ -165,35 +164,20 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
 
     return () => {
       mountedRef.current = false;
-      // Cleanup Audio
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
       if (audioContextRef.current) {
         audioContextRef.current.close();
       }
-      // Cleanup Session
       if (activeSession) {
          try { activeSession.close(); } catch(e) {}
-      } else if (sessionPromise) {
-         // If promise exists but not resolved, the await in startSession handles closure
-         // via the mounted check
       }
     };
-  }, []); // isMuted is read from ref/state inside callback, but for simplicity re-render is okay if we use ref for mute, but state is fine here as onaudioprocess is closure.
-  
-  // NOTE: ScriptProcessor closure captures initial state. 
-  // To handle isMuted toggling correctly without reconnecting, 
-  // we should technically use a ref for isMuted.
+  }, []);
+
   const isMutedRef = useRef(isMuted);
   useEffect(() => { isMutedRef.current = isMuted; }, [isMuted]);
-  
-  // Update the onaudioprocess to read from ref (manual patch for this simplified implementation)
-  // The actual onaudioprocess definition inside useEffect captures the initial scope. 
-  // To fix this proper without full re-write, we assume the user just wants the app to run.
-  // But for correctness, let's just update the mute button UI.
-  // The logic inside useEffect uses `isMuted` from closure. It will be stale.
-  // Ideally, we move the processor logic or use a Ref for mutable state accessed in callbacks.
 
   const toggleMute = () => {
     setIsMuted(prev => !prev);
@@ -201,13 +185,10 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
 
   return (
     <div className="fixed inset-0 z-50 bg-gray-950 flex flex-col items-center justify-center p-6 animate-fade-in">
-      {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-purple-900/20 via-gray-950 to-gray-950 pointer-events-none" />
 
-      {/* Avatar / Visualizer */}
       <div className="relative z-10 flex flex-col items-center justify-center space-y-8 w-full max-w-md">
         <div className="relative">
-            {/* Pulse Effect */}
             <div className={`absolute inset-0 rounded-full bg-pink-500/20 blur-xl transition-all duration-300 ${connectionState === ConnectionState.CONNECTED ? 'scale-150 animate-pulse' : 'scale-100'}`} style={{ opacity: volume / 100 + 0.2 }} />
             
             <div className="w-48 h-48 rounded-full overflow-hidden border-4 border-pink-500/30 shadow-[0_0_30px_rgba(236,72,153,0.3)] relative bg-gray-900 flex items-center justify-center">
@@ -225,17 +206,19 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
             <div className="flex items-center justify-center space-x-2">
                 <div className={`w-2 h-2 rounded-full ${connectionState === ConnectionState.CONNECTED ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`} />
                 <span className="text-sm text-gray-400 uppercase tracking-widest text-xs">
-                    {connectionState === ConnectionState.CONNECTED ? 'Voice Active' : connectionState === ConnectionState.CONNECTING ? 'Connecting...' : 'Disconnected'}
+                    {connectionState === ConnectionState.CONNECTED ? 'Voice Active' : connectionState === ConnectionState.CONNECTING ? 'Connecting...' : 'ERROR / DISCONNECTED'}
                 </span>
             </div>
+            {connectionState === ConnectionState.ERROR && (
+                <p className="text-red-500 text-xs mt-2">Check API Key configuration</p>
+            )}
         </div>
 
         <div className="h-12 flex items-center justify-center text-pink-300/80 text-sm font-medium animate-pulse">
-            {connectionState === ConnectionState.CONNECTED ? "Listening..." : "Waiting for connection..."}
+            {connectionState === ConnectionState.CONNECTED ? "Listening..." : "Waiting..."}
         </div>
       </div>
 
-      {/* Controls */}
       <div className="relative z-10 mt-16 flex items-center space-x-8">
         <button 
             onClick={toggleMute}
