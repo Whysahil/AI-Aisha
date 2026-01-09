@@ -25,13 +25,6 @@ const VoiceMode: React.FC<VoiceModeProps> = ({ onEndCall }) => {
   useEffect(() => {
     mountedRef.current = true;
     
-    // API_KEY is injected by vite.config.ts define
-    if (!process.env.API_KEY) {
-      console.error("Missing API_KEY");
-      setConnectionState(ConnectionState.ERROR);
-      return;
-    }
-
     aiRef.current = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     let sessionPromise: Promise<any> | null = null;

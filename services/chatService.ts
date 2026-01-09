@@ -6,18 +6,8 @@ export class ChatService {
   private chatSession: Chat | null = null;
 
   constructor() {
-    if (!process.env.API_KEY) {
-      console.error("API_KEY is missing. Chat features will not work.");
-    }
-    
-    try {
-      this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      this.startNewChat();
-    } catch (e) {
-      console.error("Failed to initialize GoogleGenAI", e);
-      // Initialize with empty to satisfy TS, usage will throw specific errors
-      this.ai = new GoogleGenAI({ apiKey: "" });
-    }
+    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    this.startNewChat();
   }
 
   startNewChat() {
@@ -46,7 +36,7 @@ export class ChatService {
   async sendMessage(text: string): Promise<string> {
     if (!this.chatSession) {
       this.startNewChat();
-      if (!this.chatSession) return "Sorry, I'm having trouble connecting right now. (Missing API Key?)";
+      if (!this.chatSession) return "Sorry, I'm having trouble connecting right now.";
     }
     
     try {
