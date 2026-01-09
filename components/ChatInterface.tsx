@@ -57,6 +57,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onStartCall }) => {
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
       console.error("Failed to generate response", error);
+      
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'model',
+        text: "Opps! I'm having trouble connecting right now. 🥺 Can you check your internet or API key? 💕",
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
