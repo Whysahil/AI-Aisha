@@ -1,4 +1,3 @@
-/// <reference types="vite/client" />
 
 interface ImportMetaEnv {
   readonly VITE_API_KEY: string;
@@ -9,11 +8,6 @@ interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
 
-declare global {
-  namespace NodeJS {
-    interface ProcessEnv {
-      API_KEY: string;
-      [key: string]: any;
-    }
-  }
-}
+// Removed conflicting `declare var process` to fix "Cannot redeclare block-scoped variable" error.
+// The process variable is already declared by @types/node.
+// Removed `/// <reference types="vite/client" />` as the type definition file was not found.
