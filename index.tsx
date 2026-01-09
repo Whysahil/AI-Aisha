@@ -12,10 +12,6 @@ interface ErrorBoundaryState {
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  // Explicitly declare props with definite assignment assertion to fix TS error
-  // "Property 'props' does not exist on type 'ErrorBoundary'"
-  readonly props!: Readonly<ErrorBoundaryProps>;
-
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null
