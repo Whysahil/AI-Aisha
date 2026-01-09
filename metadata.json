@@ -1,0 +1,7 @@
+{
+  "name": "Aisha - AI Girlfriend",
+  "description": "A cute, flirty, and emotionally supportive AI companion with text and voice modes.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
